@@ -24,28 +24,36 @@ app.get('/', (req, res)=> {
 })
 
 app.get('/jugadores', (req,res) => {
-    db.select('*').from('jugadores').where('activo','=',true)
+    db.select('*').from('Jugadores').where('activo','=',true)
     .then(data => res.json(data))
     .catch(err => res.status(400).json("Error!"))
 })
 
 app.get('/partidos', (req,res) => {
-    db.select('id').from('jugadores').where('activo','=',true)
-    .then(id => {
-        db.select('*').from('partidos').where('id_torneo','=', id)
-        .then(data => res.json(data))
-        .catch(err => res.status(400).json("Error!"))
+    db.select().from('Torneos').where('activo','=',true).first()
+    .then(data => {
+      console.log(data.id)
+        db.raw(`select "Partidos".id "id_partido", "Partidos".nro, TO_CHAR("Partidos".fecha_partido :: DATE, 'dd/mm/yyyy') "fecha", "Equipos".nombre, sum("Movimientos".importe) "recaudacion" from "Partidos"
+                LEFT JOIN "Movimientos" ON  "Movimientos".id_partido = "Partidos".id
+                INNER JOIN "Equipos" ON "Equipos".id = "Partidos".id_equipo
+                WHERE id_torneo = ${data.id}
+                group by "Partidos".id, "Partidos".nro, "Partidos".fecha_partido, "Equipos".nombre`)
+        .then(data => {
+          console.log(data)
+          res.json(data.rows)
+        })
+        .catch(err => res.status(400).json(err))
     })
-    .catch(err => res.status(400).json("Error!"))
+    .catch(err => res.status(400).json(err))
 })
 
 app.post('/signin', (req, res) => {
-  db.select('email', 'hash').from('login')
+  db.select('email', 'hash').from('Login')
     .where('email', '=', req.body.email)
     .then(data => {
       const isValid = bcrypt.compareSync(req.body.password, data[0].hash);
       if (isValid) {
-        return db.select('*').from('usuarios')
+        return db.select('*').from('Usuarios')
           .where('email', '=', req.body.email)
           .then(user => {
             res.json(user[0])
@@ -60,13 +68,13 @@ app.post('/signin', (req, res) => {
 
 app.put('/desjugador', (req, res) => {
     const { id } = req.body;
-    db('jugadores').where('id', '=', id)
+    db('Jugadores').where('id', '=', id)
     .update('activo',false)
     .returning('activo')
     .then(jugador => {
       res.json(jugador[0]);
     })
-    .catch(err => res.status(400).json('unable to get entries'))
+    .catch(err => res.status(400).json('Imposible desactivar jugador.'))
   })
 
 app.post('/jugador', (req, res)=> {
@@ -85,7 +93,7 @@ app.post('/jugador', (req, res)=> {
             fecha_creacion: new Date(),
             activo: true
         })
-        .into('jugadores')
+        .into('Jugadores')
         .returning('dni')
         .then( dni => {
             res.json("Jugador creado OK!")
@@ -107,10 +115,10 @@ app.post('/register', (req, res) => {
         hash: hash,
         email: email
       })
-      .into('login')
+      .into('Login')
       .returning('email')
       .then(loginEmail => {
-        return trx('usuarios')
+        return trx('Usuarios')
           .returning('*')
           .insert({
             email: loginEmail[0],

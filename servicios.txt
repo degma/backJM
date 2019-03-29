@@ -1,11 +1,11 @@
 
-crearJugador POST
-borrarJugador POST (activo = false)
-crearPartido POST
-borrarPartido POST (activo = false)
+OK crearJugador POST 
+OK desjugador POST (activo = false)
+NO PRIORITARIO crearPartido POST
+NO PRIORITARIO borrarPartido POST (activo = false)
 cobrarPartido POST (id_jugador, id_partido, importe_pagado, importe_partido)
-partidos
-jugadores
+OK partidos
+OK jugadores
 movimientos GET (id_jugador)
 recaudación GET (id_partido)
 situacion GET (id_jugador)
