@@ -29,16 +29,74 @@ app.get('/jugadores', (req, res) => {
         .catch(err => res.status(400).json("Error!"))
 })
 
+app.get('/recaudacion', (req, res) => {
+    db.raw(`
+    select t.nombre "torneo", p.nro, e.nombre "equipo", sum(mov.importe) "recaudacion"
+    from "Movimientos" mov, "Torneos" t, "Partidos" p, "Equipos" e
+    where p.id_torneo = t.id
+    and mov.id_operacion = 1
+    and p.id = mov.id_partido
+    and p.id_equipo = e.id
+    and t.activo = true
+    group by t.nombre, p.nro, e.nombre
+    order by nro desc
+    `)
+        .then(data => {
+            console.log(data)
+            res.json(data.rows)
+        })
+        .catch(err => res.status(400).json(err))
+})
+
+app.get('/deudores', (req, res) => {
+    db.raw(`
+    SELECT j.nombre, j.apellido, j.apodo, (pagos.importe - partidos.importe) as "deuda"
+    FROM 
+    (SELECT id_jugador, sum(importe) as "importe" FROM "Movimientos" m WHERE id_operacion = 1 and exists (select 1 from "Partidos" p, "Torneos" t where  m.id_partido = p.id and p.id_torneo = t.id and t.activo = true) GROUP by id_jugador) as "pagos",
+    (SELECT id_jugador, sum(importe) as "importe" FROM "Movimientos" m WHERE id_operacion = 2 and exists (select 1 from "Partidos" p, "Torneos" t where  m.id_partido = p.id and p.id_torneo = t.id and t.activo = true) GROUP by id_jugador) as "partidos",
+    "Jugadores" j
+    WHERE j.id = pagos.id_jugador
+    and j.id = partidos.id_jugador
+    and (pagos.importe - partidos.importe) < 0    
+    `)
+        .then(data => {
+            console.log(data)
+            res.json(data.rows)
+        })
+        .catch(err => res.status(400).json(err))
+})
+
+
 app.get('/cobrosfecha/:idpartido', (req, res) => {
 
     const { idpartido } = req.params;
 
     db.raw(`
     SELECT "J1".id ,"J1".nombre,"J1".apellido,"J1".apodo, 
-    (SELECT SUM(importe) FROM "Movimientos" WHERE id_partido = ${idpartido} and id_operacion= 1 and id_jugador = "J1".id) as "Pago",
-    (SELECT SUM(importe) FROM "Movimientos" WHERE id_partido = ${idpartido} and id_operacion=2 and id_jugador = "J1".id) as "Debe"
+    (SELECT SUM(importe) FROM "Movimientos" WHERE id_partido = ${idpartido} and id_operacion = 1 and id_jugador = "J1".id) as "Pago",
+    ((SELECT SUM(importe) FROM "Movimientos" WHERE id_operacion=1 and id_jugador = "J1".id) - (SELECT SUM(importe) FROM "Movimientos" WHERE id_operacion=2 and id_jugador = "J1".id)) as "Deuda"
     FROM "Jugadores" as "J1"
     WHERE "J1".activo = true
+    `)
+        .then(data => {
+            console.log(data)
+            res.json(data.rows)
+        })
+        .catch(err => res.status(400).json(err))
+})
+
+app.get('/pagosjugador/:idjugador', (req, res) => {
+
+    const { idjugador } = req.params;
+
+    db.raw(`
+    select p.nro, e.nombre, mov.*  from "Movimientos" mov, "Partidos" p, "Equipos" e, "Torneos" t
+    where mov.id_partido = p.id
+    and p.id_equipo = e.id
+    and t.id = p.id_torneo
+    and t.activo = true
+    and mov.id_jugador = ${idjugador}
+    order by p.nro desc, mov.id desc
     `)
         .then(data => {
             console.log(data)
@@ -48,6 +106,7 @@ app.get('/cobrosfecha/:idpartido', (req, res) => {
 
         .catch(err => res.status(400).json(err))
 })
+
 
 app.get('/partidos', (req, res) => {
     db.select().from('Torneos').where('activo', '=', true).first()
@@ -173,7 +232,7 @@ app.post('/register', (req, res) => {
                 return trx('Usuarios')
                     .returning('*')
                     .insert({
-                        email: loginEmail[0],
+                        email: loginEmail[0],   
                         nombre: nombre,
                         creado: new Date()
                     })
